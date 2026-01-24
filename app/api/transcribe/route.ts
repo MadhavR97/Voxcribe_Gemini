@@ -45,8 +45,10 @@ export async function POST(req: Request) {
         const transcript =
             data?.candidates?.[0]?.content?.parts?.[0]?.text || ""
 
+        const cleanedTranscript = transcript.replace(/\[\d+m\d+s\d+ms-\d+m\d+s\d+ms\]/g, '')
+
         return NextResponse.json({
-            transcript,
+            transcript: cleanedTranscript,
             duration: 120,
         })
     } catch (error) {
