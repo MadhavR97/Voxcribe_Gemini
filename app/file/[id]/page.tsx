@@ -152,11 +152,11 @@ export default function FilePage() {
                     </div>
 
                     {/* Words */}
-                    <div className="text-white leading-relaxed">
+                    <div className="text-white leading-relaxed break-words overflow-wrap-anywhere">
                       {sentence.words.map((word, j) => (
                         <span
                           key={j}
-                          className="mr-1 hover:text-red-400 transition"
+                          className="mr-1 hover:text-red-400 transition inline-block"
                           title={word.time}
                         >
                           {word.text}
