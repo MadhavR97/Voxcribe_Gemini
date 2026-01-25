@@ -4,7 +4,10 @@ export async function POST(req: Request) {
     try {
         const formData = await req.formData()
         const file = formData.get("file") as File
-        const language = formData.get("language") as string
+        const languageRaw = formData.get("language") as string | null
+        const language = (typeof languageRaw === "string" && languageRaw.trim())
+            ? languageRaw.trim()
+            : "English"
 
         if (!file) {
             return NextResponse.json(
@@ -14,6 +17,8 @@ export async function POST(req: Request) {
         }
 
         const buffer = Buffer.from(await file.arrayBuffer())
+
+        const prompt = `Transcribe this audio file. Output the transcript in ${language} only. If the speech is in a different language, translate it to ${language}. Provide only the raw transcript text—no timestamps, labels, or commentary.`
 
         const response = await fetch(
             `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`,
@@ -31,7 +36,7 @@ export async function POST(req: Request) {
                                     },
                                 },
                                 {
-                                    text: `Transcribe this audio in ${language}`,
+                                    text: prompt,
                                 },
                             ],
                         },
