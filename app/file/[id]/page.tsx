@@ -216,6 +216,109 @@ export default function FilePage() {
   const progressPercent =
     totalTime > 0 ? (currentTime / totalTime) * 100 : 0
 
+  // --- Export helpers ---
+  const getBaseFilename = () =>
+    (audioName || "transcript").replace(/\.[^/.]+$/, "") || "transcript"
+
+  const getTranscriptText = () =>
+    sentences
+      .map((s) => s.words.map((w) => w.text).join(" "))
+      .join("\n\n")
+      .trim()
+
+  const secondsToSrtTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = Math.floor(seconds % 60)
+    const ms = Math.round((seconds % 1) * 1000)
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")},${ms.toString().padStart(3, "0")}`
+  }
+
+  const getSrtContent = () => {
+    const hasTiming = totalTime > 0 && sentencesWithTiming.length > 0
+    if (hasTiming) {
+      return sentencesWithTiming
+        .map((sent, i) => {
+          const words = (sent as SentenceWithTiming).words
+          if (words.length === 0) return ""
+          const start = words[0].start
+          const end = words[words.length - 1].end
+          const text = words.map((w) => w.text).join(" ")
+          return `${i + 1}\n${secondsToSrtTime(start)} --> ${secondsToSrtTime(end)}\n${text}\n`
+        })
+        .filter(Boolean)
+        .join("\n")
+    }
+    // No timing: use sequential placeholders
+    return sentences
+      .map((sent, i) => {
+        const text = sent.words.map((w) => w.text).join(" ")
+        if (!text) return ""
+        const start = i
+        const end = i + 1
+        return `${i + 1}\n${secondsToSrtTime(start)} --> ${secondsToSrtTime(end)}\n${text}\n`
+      })
+      .filter(Boolean)
+      .join("\n")
+  }
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadTxt = () => {
+    const text = getTranscriptText() || "(No transcript)"
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
+    downloadBlob(blob, `${getBaseFilename()}.txt`)
+  }
+
+  const downloadSrt = () => {
+    const srt = getSrtContent() || "1\n00:00:00,000 --> 00:00:01,000\n(No transcript)\n"
+    const blob = new Blob([srt], { type: "text/plain;charset=utf-8" })
+    downloadBlob(blob, `${getBaseFilename()}.srt`)
+  }
+
+  const downloadPdf = async () => {
+    try {
+      const res = await fetch("/api/export/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: getTranscriptText(),
+          filename: getBaseFilename(),
+        }),
+      })
+      if (!res.ok) throw new Error("PDF export failed")
+      const blob = await res.blob()
+      downloadBlob(blob, `${getBaseFilename()}.pdf`)
+    } catch (e) {
+      console.error("PDF export failed:", e)
+    }
+  }
+
+  const downloadDocx = async () => {
+    try {
+      const res = await fetch("/api/export/docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: getTranscriptText(),
+          filename: getBaseFilename(),
+        }),
+      })
+      if (!res.ok) throw new Error("DOCX export failed")
+      const blob = await res.blob()
+      downloadBlob(blob, `${getBaseFilename()}.docx`)
+    } catch (e) {
+      console.error("DOCX export failed:", e)
+    }
+  }
+
   return (
     <div className="relative min-h-screen w-full bg-gradient-to-br from-black via-zinc-900 to-black overflow-hidden">
 
@@ -345,16 +448,28 @@ export default function FilePage() {
             </h3>
 
             <div className="space-y-2 text-sm">
-              <button className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300">
+              <button
+                onClick={downloadPdf}
+                className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300 text-left"
+              >
                 📄 Download PDF
               </button>
-              <button className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300">
+              <button
+                onClick={downloadDocx}
+                className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300 text-left"
+              >
                 📝 Download DOCX
               </button>
-              <button className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300">
+              <button
+                onClick={downloadTxt}
+                className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300 text-left"
+              >
                 📃 Download TXT
               </button>
-              <button className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300">
+              <button
+                onClick={downloadSrt}
+                className="w-full px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-300 text-left"
+              >
                 🎬 Download SRT
               </button>
             </div>
