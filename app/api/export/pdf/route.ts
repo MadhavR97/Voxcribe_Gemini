@@ -38,14 +38,17 @@ export async function POST(req: Request) {
       doc.end()
     })
 
-    return new NextResponse(pdfBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename || "transcript"}.pdf"`,
-        "Content-Length": pdfBuffer.length.toString(),
-      },
-    })
+    return new NextResponse(
+      new Uint8Array(pdfBuffer),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${filename || "transcript"}.pdf"`,
+          "Content-Length": pdfBuffer.length.toString(),
+        },
+      }
+    )
   } catch (error) {
     console.error("PDF export failed:", error)
     return NextResponse.json(
