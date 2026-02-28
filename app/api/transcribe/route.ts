@@ -2,21 +2,27 @@ import { NextResponse } from "next/server"
 
 export async function POST(req: Request) {
     try {
-        const formData = await req.formData()
-        const file = formData.get("file") as File
-        const languageRaw = formData.get("language") as string | null
-        const language = (typeof languageRaw === "string" && languageRaw.trim())
-            ? languageRaw.trim()
-            : "English"
+        const body = await req.json()
+        const { fileUrl, mimeType, language: languageRaw } = body
 
-        if (!file) {
+        if (!fileUrl) {
             return NextResponse.json(
-                { error: "No file uploaded" },
+                { error: "No file URL provided" },
                 { status: 400 }
             )
         }
 
-        const buffer = Buffer.from(await file.arrayBuffer())
+        const language = (typeof languageRaw === "string" && languageRaw.trim())
+            ? languageRaw.trim()
+            : "English"
+
+        // Fetch the file from the URL (Supabase Storage)
+        const fileResponse = await fetch(fileUrl)
+        if (!fileResponse.ok) {
+            throw new Error(`Failed to fetch file from storage: ${fileResponse.statusText}`)
+        }
+        const arrayBuffer = await fileResponse.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
 
         // UPDATED: Prompt now requests speaker identification and specific formatting
         const prompt = `
@@ -44,7 +50,7 @@ export async function POST(req: Request) {
                             parts: [
                                 {
                                     inlineData: {
-                                        mimeType: file.type,
+                                        mimeType: mimeType || "audio/mp3",
                                         data: buffer.toString("base64"),
                                     },
                                 },
@@ -59,8 +65,6 @@ export async function POST(req: Request) {
         )
 
         const data = await response.json()
-
-        console.log(data)
 
         // Check if API returned an error
         if (!response.ok) {
