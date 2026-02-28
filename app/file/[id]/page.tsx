@@ -64,7 +64,6 @@ export default function FilePage() {
 
       if (data?.user) {
         const username = data.user.user_metadata?.username
-
         setUsername(username ? username : "User")
       } else {
         setUsername("User")
@@ -122,50 +121,98 @@ export default function FilePage() {
 
   useEffect(() => {
     const loadFile = async () => {
-      const stored = JSON.parse(localStorage.getItem("voxscribe_files") || "[]")
-      const current = stored.find((f: any) => f.id === id)
+      if (!id) return
 
-      if (current) {
-        setAudioName(current.name)
+      try {
+        // 1. Fetch file metadata from Supabase
+        const { data: fileData, error } = await supabase
+          .from('files')
+          .select('*')
+          .eq('id', id)
+          .single()
 
-        // Fetch binary from IndexedDB
-        const audioFile = await getAudioFile(current.id)
+        if (error || !fileData) {
+          console.error("File not found in database:", error)
+          // Fallback to localStorage if not found in DB (migration support)
+          const stored = JSON.parse(localStorage.getItem("voxscribe_files") || "[]")
+          const current = stored.find((f: any) => f.id === id)
+          if (current) {
+            setAudioName(current.name)
+            processTranscript(current.transcript)
+          }
+          return
+        }
+
+        setAudioName(fileData.name)
+        processTranscript(fileData.transcript)
+
+        // 2. Fetch binary from IndexedDB (local cache)
+        // Note: In a full production app, you'd fetch from Supabase Storage here
+        const audioFile = await getAudioFile(fileData.id)
         if (audioFile) {
           setAudioUrl(URL.createObjectURL(audioFile))
         }
 
-        if (current.transcript) {
-          const temp: Sentence[] = []
+        // 3. Load recent files for sidebar
+        const { data: recentData } = await supabase
+          .from('files')
+          .select('id, name')
+          .order('created_at', { ascending: false })
+          .limit(5)
+        
+        if (recentData) {
+          setRecentFiles(recentData)
+        }
 
-          const matches = [...current.transcript.matchAll(/(Speaker\s*\d+):\s*([\s\S]*?)(?=(Speaker\s*\d+:|$))/gi)]
+      } catch (err) {
+        console.error("Error loading file:", err)
+      }
+    }
 
-          matches.forEach((match) => {
-            const speaker = match[1].trim()
-            const text = match[2].trim()
+    const processTranscript = (transcriptText: string) => {
+      if (!transcriptText) return
 
-            const words = text
-              .split(/\s+/)
-              .filter(Boolean)
-              .map((w: string) => ({ text: w, time: "" }))
-
-            // merge with previous speaker if same
-            const last = temp[temp.length - 1]
-
-            if (last && last.speaker === speaker) {
-              last.words.push(...words)
-            } else {
-              temp.push({
-                speaker,
-                words,
-              })
-            }
+      const temp: Sentence[] = []
+      
+      // Updated regex to better handle "Speaker X:" or "Person X:" labels
+      // This splits the text by speaker labels while keeping the delimiter
+      const parts = transcriptText.split(/(Speaker \d+:|Person \d+:)/i)
+      
+      let currentSpeaker = "Speaker 1"
+      
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i].trim()
+        if (!part) continue
+        
+        const speakerMatch = part.match(/^(Speaker \d+|Person \d+):$/i)
+        
+        if (speakerMatch) {
+          currentSpeaker = speakerMatch[1]
+        } else {
+          // It's content
+          const words = part
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((w: string) => ({ text: w, time: "" }))
+            
+          temp.push({
+            speaker: currentSpeaker,
+            words
           })
-
-          setSentences(temp)
         }
       }
-      setRecentFiles(stored.slice(0, 5).map((f: any) => ({ id: f.id, name: f.name })))
+      
+      // If regex didn't match standard format, fallback to simple text
+      if (temp.length === 0 && transcriptText.trim()) {
+         temp.push({
+           speaker: "Speaker 1",
+           words: transcriptText.split(/\s+/).filter(Boolean).map(w => ({ text: w, time: "" }))
+         })
+      }
+
+      setSentences(temp)
     }
+
     loadFile()
   }, [id])
 

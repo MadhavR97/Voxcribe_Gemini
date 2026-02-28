@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import { storeAudioFile } from "@/app/utils/audioStorage"
 import { FiChevronDown, FiClock } from "react-icons/fi"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
 
 const LANGUAGES = [
   { code: "en", label: "English", flag: "🇺🇸" },
@@ -122,6 +123,14 @@ export default function TranscriptionPage() {
       return
     }
 
+    // Check auth first
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      alert("Please login to transcribe files")
+      router.push("/auth/login")
+      return
+    }
+
     setShowProgress(true)
     setIsTranscribing(true)
 
@@ -155,23 +164,29 @@ export default function TranscriptionPage() {
       // Complete the progress bar
       setProgress(100)
 
-      const stored = JSON.parse(localStorage.getItem("voxscribe_files") || "[]")
+      // Store audio file locally (IndexedDB) for playback
       const fileId = crypto.randomUUID()
-
       await storeAudioFile(fileId, file)
 
-      stored.unshift({
-        id: fileId,
-        name: file.name,
-        size: file.size,
-        duration: data.duration || 0,
-        language: language.label,
-        createdAt: new Date().toISOString(),
-        status: "completed",
-        transcript: transcriptText,
-      })
+      // Store metadata in Supabase
+      const { error: dbError } = await supabase
+        .from('files')
+        .insert({
+          id: fileId,
+          user_id: user.id,
+          name: file.name,
+          size: file.size,
+          duration: data.duration || 0,
+          language: language.label,
+          transcript: transcriptText,
+          status: "completed",
+          // created_at is handled by default value in DB
+        })
 
-      localStorage.setItem("voxscribe_files", JSON.stringify(stored))
+      if (dbError) {
+        console.error("Database save error:", dbError)
+        throw new Error("Failed to save transcription to database")
+      }
 
       // Redirect after showing 100%
       setTimeout(() => {

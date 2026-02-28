@@ -21,36 +21,80 @@ export default function DashboardPage() {
 
   const [files, setFiles] = useState<VoxFile[]>([])
   const [username, setUsername] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+    const loadDashboardData = async () => {
+      try {
+        // 1. Get User
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-      if (user) {
-        setUsername(user.user_metadata?.username ?? null)
+        if (authError || !user) {
+          console.error("Auth error or no user:", authError)
+          router.replace("/auth/login")
+          return
+        }
+
+        setUsername(user.user_metadata?.username ?? user.email?.split('@')[0] ?? "User")
+
+        // 2. Fetch Files from Supabase
+        // Ensure your table is named 'files' and has RLS policies allowing 'select' for authenticated users
+        const { data, error } = await supabase
+          .from('files')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          // Log the full error object to debug RLS or schema issues
+          console.error("Error fetching files details:", JSON.stringify(error, null, 2))
+        } else if (data) {
+          // Map snake_case DB fields to camelCase frontend type
+          const mappedFiles: VoxFile[] = data.map((file) => ({
+            id: file.id,
+            name: file.name,
+            size: file.size,
+            duration: file.duration,
+            language: file.language,
+            createdAt: file.created_at, // Supabase returns ISO string in created_at
+            status: file.status,
+          }))
+          setFiles(mappedFiles)
+        }
+      } catch (error) {
+        console.error("Dashboard loading unexpected error:", error)
+      } finally {
+        setLoading(false)
       }
     }
 
-    getUser()
-  }, [])
-
-  useEffect(() => {
-    const stored = JSON.parse(
-      localStorage.getItem("voxscribe_files") || "[]"
-    )
-    setFiles(stored)
-  }, [])
+    loadDashboardData()
+  }, [router])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.replace("/auth/login")
   }
 
-  const clearRecentFiles = () => {
-    localStorage.removeItem("voxscribe_files")
-    setFiles([])
+  const clearRecentFiles = async () => {
+    if (!confirm("Are you sure you want to delete all your files? This cannot be undone.")) {
+      return
+    }
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { error } = await supabase
+      .from('files')
+      .delete()
+      .eq('user_id', user.id)
+
+    if (error) {
+      console.error("Error deleting files:", error)
+      alert("Failed to delete files")
+    } else {
+      setFiles([])
+    }
   }
 
   const formatDuration = (seconds: number) => {
@@ -109,7 +153,17 @@ export default function DashboardPage() {
 
           {/* Content */}
           <AnimatePresence mode="wait">
-            {files.length === 0 ? (
+            {loading ? (
+               <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-center py-20 text-zinc-400"
+              >
+                Loading files...
+              </motion.div>
+            ) : files.length === 0 ? (
               <motion.div
                 key="empty"
                 initial={{ opacity: 0, y: 20 }}
