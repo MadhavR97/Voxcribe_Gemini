@@ -7,6 +7,7 @@ import { FiChevronDown, FiClock } from "react-icons/fi"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 
+// ... (LANGUAGES array remains the same) ...
 const LANGUAGES = [
   { code: "en", label: "English", flag: "🇺🇸" },
   { code: "hi", label: "Hindi", flag: "🇮🇳" },
@@ -124,6 +125,8 @@ export default function TranscriptionPage() {
       return
     }
 
+    if (isTranscribing) return // Prevent double submission
+
     // Check auth first
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -140,9 +143,9 @@ export default function TranscriptionPage() {
       // 1. Upload file to Supabase Storage
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`
-      
+
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('audio-files') // Make sure this bucket exists!
+        .from('audio-files')
         .upload(fileName, file)
 
       if (uploadError) {
@@ -156,7 +159,7 @@ export default function TranscriptionPage() {
 
       setStatusMessage("Transcribing audio...")
 
-      // 3. Send URL to API instead of file
+      // 3. Send URL to API
       const res = await fetch("/api/transcribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,6 +196,7 @@ export default function TranscriptionPage() {
       await storeAudioFile(fileId, file)
 
       // Store metadata in Supabase
+      // REMOVED localStorage logic to prevent duplicates
       const { error: dbError } = await supabase
         .from('files')
         .insert({

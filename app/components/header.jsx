@@ -68,7 +68,7 @@ export default function Header({ userName, onLogout }) {
             <li>
               <button
                 onClick={() => router.push("/dashboard")}
-                className="text-zinc-300 hover:text-white transition-colors"
+                className="text-zinc-300 hover:text-white transition-colors cursor-pointer"
               >
                 Home
               </button>
@@ -76,7 +76,7 @@ export default function Header({ userName, onLogout }) {
             <li>
               <button
                 onClick={() => router.push("/transcription")}
-                className="text-zinc-300 hover:text-white transition-colors"
+                className="text-zinc-300 hover:text-white transition-colors cursor-pointer"
               >
                 Transcribe
               </button>
@@ -92,7 +92,7 @@ export default function Header({ userName, onLogout }) {
               </div>
               <button
                 onClick={onLogout}
-                className="px-4 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/30 transition-all text-sm"
+                className="px-4 py-1.5 rounded-lg border border-white/10 text-zinc-300 hover:text-white hover:border-white/30 transition-all text-sm cursor-pointer"
               >
                 Logout
               </button>
